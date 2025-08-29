@@ -1,4 +1,5 @@
 import mysql.connector
+import hashlib
 db = mysql.connector.connect(
   host="localhost",
   user="root",
@@ -9,7 +10,6 @@ if db.is_connected():
     print("Connection is open.")
 else:
     print("Connection is closed.")
-
 # Signin Phase
 
 user_id = input("Enter your user ID (max 10 characters): ")
@@ -21,7 +21,7 @@ user_age = input("Enter your Age: ")
 c_id = user_id.strip()
 if c_id == "":
     print("INVALID ID! \nID can't be left blank")
-elif len(user_id) > 11:
+elif len(user_id) > 10:
     print("INVALID ID! \nID must not exceed 10 characters")
 else:
     print("ID accepted")
@@ -41,8 +41,6 @@ if c_mail == "":
     print("INVALID EMAIL! \nEmail cannot be left blank")
 elif "@" not in c_mail or "." not in c_mail:
     print("INVALID EMAIL! \nEmail must contain '@' and '.'")
-elif len(user_mail) >31:
-    print("INVALID EMAIL! \nEmail must be of 31 characters")    
 else:
     print("Email accepted")
 
@@ -54,6 +52,22 @@ elif not c_age.isdigit():
     print("INVALID AGE! \nAge must contain only numbers")
 else:
     print("Age accepted")
+
+hashed_pass = hashlib.sha256(user_pass.encode()).hexdigest()
+if db.is_connected():
+    print("Connection successful!")
+    cursor = db.cursor()
+    insert_query = 'insert into uinfo(uid, upass, email, age)VALUES (%s, %s, %s, %s)'
+                # Prepare the data as a tuple
+    user_data_tuple = (user_id, hashed_pass, user_mail, int(user_age))
+                
+                # Execute the query
+    cursor.execute(insert_query, user_data_tuple)
+                
+                # Commit the changes to the database
+    db.commit()
+                
+    print("\nUser data added to the database successfully!")
 
 
 
