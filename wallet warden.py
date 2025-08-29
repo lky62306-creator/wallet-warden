@@ -1,0 +1,46 @@
+# Signin Phase
+
+user_id = input("Enter your user ID (max 10 characters): ")
+user_pass = input("Enter your Password (8 characters): ")
+user_mail = input("Enter your E-mail: ")
+user_age = input("Enter your Age: ")
+
+# '''Send all the above data to database
+#(Database code will be here)'''
+
+
+# --- 1. Checking for user ID ---
+c_id = user_id.strip()
+if c_id == "":
+    print("INVALID ID! \nID can't be left blank")
+elif len(user_id) > 10:
+    print("INVALID ID! \nID must not exceed 10 characters")
+else:
+    print("ID accepted")
+
+# --- 2. Checking for user Password ---
+c_pass = user_pass.strip()
+if c_pass == "":
+    print("INVALID PASSWORD! \nPassword cannot be blank or only spaces")
+elif len(user_pass) != 8:
+    print("INVALID PASSWORD! \nPassword must be exactly 8 characters long")
+else:
+    print("Password accepted")
+
+# --- 3. Checking for user E-mail ---
+c_mail = user_mail.strip()
+if c_mail == "":
+    print("INVALID EMAIL! \nEmail cannot be left blank")
+elif "@" not in c_mail or "." not in c_mail:
+    print("INVALID EMAIL! \nEmail must contain '@' and '.'")
+else:
+    print("Email accepted")
+
+# --- 4. Checking for user Age ---
+c_age = user_age.strip()
+if c_age == "":
+    print("INVALID AGE! \nAge cannot be left blank")
+elif not c_age.isdigit():
+    print("INVALID AGE! \nAge must contain only numbers")
+else:
+    print("Age accepted")
