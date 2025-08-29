@@ -21,7 +21,7 @@ user_age = input("Enter your Age: ")
 c_id = user_id.strip()
 if c_id == "":
     print("INVALID ID! \nID can't be left blank")
-elif len(user_id) > 10:
+elif len(user_id) > 11:
     print("INVALID ID! \nID must not exceed 10 characters")
 else:
     print("ID accepted")
@@ -41,6 +41,8 @@ if c_mail == "":
     print("INVALID EMAIL! \nEmail cannot be left blank")
 elif "@" not in c_mail or "." not in c_mail:
     print("INVALID EMAIL! \nEmail must contain '@' and '.'")
+elif len(user_mail) >31:
+    print("INVALID EMAIL! \nEmail must be of 31 characters")    
 else:
     print("Email accepted")
 
@@ -52,6 +54,7 @@ elif not c_age.isdigit():
     print("INVALID AGE! \nAge must contain only numbers")
 else:
     print("Age accepted")
+
 
 
 
