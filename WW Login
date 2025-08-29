@@ -6,8 +6,17 @@ user_mail = input("Enter your E-mail: ")
 user_age = input("Enter your Age: ")
 
 # '''Send all the above data to database
-#(Database code will be here)'''
-
+import mysql.connector
+db = mysql.connector.connect(
+  host="localhost",
+  user="root",
+  password="1234",
+  database="WW"
+)
+if db.is_connected():
+    print("Connection is open.")
+else:
+    print("Connection is closed.")
 
 # --- 1. Checking for user ID ---
 c_id = user_id.strip()
@@ -44,4 +53,5 @@ elif not c_age.isdigit():
     print("INVALID AGE! \nAge must contain only numbers")
 else:
     print("Age accepted")
+
 
