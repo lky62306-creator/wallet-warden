@@ -44,3 +44,4 @@ elif not c_age.isdigit():
     print("INVALID AGE! \nAge must contain only numbers")
 else:
     print("Age accepted")
+
