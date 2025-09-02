@@ -52,7 +52,7 @@ def login_user(db):
 
             # Compare the hashes
             if hashed_entered_pass == stored_hashed_pass:
-                print("\nLogin successful!")
+                print("\nLogin to Wallet Warden successful!")
                 return user_id
             else:
                 print("\nInvalid password. Please try again.")
@@ -115,7 +115,7 @@ def signup_user(db):
         cursor.execute(insert_udata_query, udata_default_data)
 
         db.commit()
-        print("\nSign-up successful! You can now log in.")
+        print("\nSign-up successful! Welcome to Wallet Warden. You can now log in.")
     except mysql.connector.Error as err:
         print(f"Failed to insert data into the database: {err}")
         db.rollback()
@@ -159,7 +159,7 @@ def update_user_data(db, user_id):
         # Dynamically prompt for each expense category
         monthly_expenses = 0
         for col in financial_data:
-            if col != "Monthly_Budget":
+            if col not in ["Monthly_Budget", "Monthly_Expenses", "Amount_Left"]:
                 try:
                     expense_value = int(input(f"Enter your {col.replace('_', ' ')}: "))
                     financial_data[col] = expense_value
@@ -302,6 +302,62 @@ def add_custom_expense_column(db, user_id):
     finally:
         cursor.close()
 
+def get_financial_advice(db, user_id):
+    """
+    Analyzes the user's financial data and provides advice on where to cut expenses if the balance is low.
+    """
+    print("\n--- Your Financial Advice ---")
+    cursor = db.cursor()
+    try:
+        select_query = "SELECT financial_data FROM udata WHERE uid = %s"
+        cursor.execute(select_query, (user_id,))
+        result = cursor.fetchone()
+
+        if not result or result[0] is None:
+            print("Please update your financial data first to receive personalized advice.")
+            return
+        
+        financial_data = json.loads(result[0])
+        monthly_budget = financial_data.get("Monthly_Budget", 0)
+        amount_left = financial_data.get("Amount_Left", 0)
+
+        if monthly_budget <= 0:
+            print("Please set your monthly budget first to receive advice.")
+            return
+
+        # Check if the remaining balance is low (e.g., less than 20% of the budget)
+        low_balance_threshold = monthly_budget * 0.20
+        if amount_left < low_balance_threshold:
+            print(f"Warning: Your remaining balance is low (${amount_left}). It's a good time to review your spending.")
+            
+            # Identify expenses to cut
+            
+            # Create a dictionary of just the expense categories, excluding summary fields
+            expense_categories = {k: v for k, v in financial_data.items() if k not in ["Monthly_Budget", "Monthly_Expenses", "Amount_Left"]}
+            
+            if expense_categories:
+                # Sort the expenses in descending order and get the top 3
+                sorted_expenses = sorted(expense_categories.items(), key=lambda item: item[1], reverse=True)
+                top_expenses = sorted_expenses[:3]
+                
+                print("\nConsider cutting down on expenses in these categories:")
+                for category, amount in top_expenses:
+                    print(f"- {category.replace('_', ' ')}: You spent ${amount}")
+                
+                print("\nHere are some general tips to help you save:")
+                print("1. Review non-essential subscriptions and memberships.")
+                print("2. Look for cheaper alternatives for high-cost items like groceries or utilities.")
+                print("3. Create a weekly spending plan and track your purchases closely.")
+            
+        else:
+            print("Great news! You have a healthy remaining balance this month.")
+            print("Keep up the good work with Wallet Warden by consistently tracking your expenses.")
+
+    except mysql.connector.Error as err:
+        print(f"Error getting financial advice: {err}")
+    finally:
+        cursor.close()
+
 def main():
     """
     Main function to run the user management application.
@@ -310,13 +366,14 @@ def main():
     if not db:
         return
 
+    print("\n--- Welcome to Wallet Warden! ---")
     while True:
         choice = input("\nDo you want to (1) Log In or (2) Sign Up? (Enter '1', '2', or 'exit'): ").strip().lower()
         if choice == '1':
             logged_in_uid = login_user(db)
             if logged_in_uid:
                 while True:
-                    action = input("\nDo you want to (1) Update Data, (2) View Data, (3) Add New Expense Category, or (4) Log Out? (Enter '1', '2', '3', or '4'): ").strip()
+                    action = input("\nDo you want to (1) Update Data, (2) View Data, (3) Add New Expense Category, (4) Get Financial Advice, or (5) Log Out? (Enter '1', '2', '3', '4', or '5'): ").strip()
                     if action == '1':
                         update_user_data(db, logged_in_uid)
                     elif action == '2':
@@ -324,10 +381,12 @@ def main():
                     elif action == '3':
                         add_custom_expense_column(db, logged_in_uid)
                     elif action == '4':
+                        get_financial_advice(db, logged_in_uid)
+                    elif action == '5':
                         print("Logging out.")
                         break
                     else:
-                        print("Invalid choice. Please enter '1', '2', '3', or '4'.")
+                        print("Invalid choice. Please enter '1', '2', '3', '4', or '5'.")
             break
         elif choice == '2':
             signup_user(db)
