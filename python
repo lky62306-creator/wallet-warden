@@ -1,0 +1,346 @@
+import mysql.connector
+import hashlib
+import json
+
+def get_db_connection():
+    """
+    Establishes and returns a connection to the MySQL database.
+    """
+    try:
+        db = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="1234",
+            database="WW"
+        )
+        if db.is_connected():
+            print("Database connection successful.")
+            return db
+    except mysql.connector.Error as err:
+        print(f"Failed to connect to MySQL database: {err}")
+        return None
+
+def check_user_exists(cursor, user_id):
+    """
+    Checks if a user with the given ID already exists.
+    Returns True if the user exists, otherwise False.
+    """
+    query = "SELECT EXISTS(SELECT 1 FROM uinfo WHERE uid = %s)"
+    cursor.execute(query, (user_id,))
+    return cursor.fetchone()[0] == 1
+
+def login_user(db):
+    """
+    Handles the login process for an existing user.
+    Returns the user ID if login is successful, otherwise None.
+    """
+    user_id = input("Enter your User ID: ").strip()
+    user_pass = input("Enter your Password: ").strip()
+
+    cursor = db.cursor()
+    try:
+        # Retrieve the hashed password for the user
+        query = "SELECT upass FROM uinfo WHERE uid = %s"
+        cursor.execute(query, (user_id,))
+        result = cursor.fetchone()
+
+        if result:
+            stored_hashed_pass = result[0]
+            
+            # Hash the entered password
+            hashed_entered_pass = hashlib.sha256(user_pass.encode()).hexdigest()
+
+            # Compare the hashes
+            if hashed_entered_pass == stored_hashed_pass:
+                print("\nLogin successful!")
+                return user_id
+            else:
+                print("\nInvalid password. Please try again.")
+        else:
+            print("\nUser ID not found. Please sign up.")
+    except mysql.connector.Error as err:
+        print(f"Error during login: {err}")
+    finally:
+        cursor.close()
+    return None
+
+def signup_user(db):
+    """
+    Handles the sign-up process for a new user, and automatically
+    creates a corresponding entry in the udata table.
+    """
+    user_id = input("Enter a new User ID: ").strip()
+    
+    cursor = db.cursor()
+    try:
+        if check_user_exists(cursor, user_id):
+            print("This User ID already exists. Please log in or choose another ID.")
+            return
+
+        user_pass = input("Create a Password (min 8 characters): ").strip()
+        user_mail = input("Enter your E-mail: ").strip()
+        user_age = input("Enter your Age: ").strip()
+
+        # Simple validation before hashing
+        if len(user_pass) < 8 or not user_mail or not user_age.isdigit():
+            print("Invalid input. Password must be at least 8 characters, email and age are required.")
+            return
+
+        # Hash the password without a salt
+        hashed_pass = hashlib.sha256(user_pass.encode()).hexdigest()
+        
+        # Insert into uinfo table
+        insert_uinfo_query = 'INSERT INTO uinfo(uid, upass, email, age) VALUES (%s, %s, %s, %s)'
+        uinfo_data_tuple = (user_id, hashed_pass, user_mail, int(user_age))
+        cursor.execute(insert_uinfo_query, uinfo_data_tuple)
+
+        # Initialize default financial data as a JSON string
+        default_financial_data = {
+            "Monthly_Budget": 0,
+            "Food_Expenses": 0,
+            "Personal_Expenses": 0,
+            "Bills": 0,
+            "Tax": 0,
+            "EMI": 0
+        }
+        # The new table `udata` must be created with a JSON column
+        # e.g., CREATE TABLE udata (uid VARCHAR(255) PRIMARY KEY, financial_data JSON);
+
+        # Now, insert a corresponding record into the udata table with default values.
+        insert_udata_query = """
+            INSERT INTO udata (uid, financial_data)
+            VALUES (%s, %s)
+        """
+        udata_default_data = (user_id, json.dumps(default_financial_data))
+        cursor.execute(insert_udata_query, udata_default_data)
+
+        db.commit()
+        print("\nSign-up successful! You can now log in.")
+    except mysql.connector.Error as err:
+        print(f"Failed to insert data into the database: {err}")
+        db.rollback()
+    finally:
+        cursor.close()
+
+def update_user_data(db, user_id):
+    """
+    Allows a logged-in user to input their financial data and updates the udata table.
+    This function now works with the JSON column.
+    """
+    print("\n--- Update Your Monthly Financial Data ---")
+    
+    cursor = db.cursor()
+    try:
+        # Get existing financial data from the JSON column
+        select_query = "SELECT financial_data FROM udata WHERE uid = %s"
+        cursor.execute(select_query, (user_id,))
+        result = cursor.fetchone()
+        
+        if not result or result[0] is None:
+            print("No financial data found for your account. Initializing data now.")
+            financial_data = {
+                "Monthly_Budget": 0,
+                "Food_Expenses": 0,
+                "Personal_Expenses": 0,
+                "Bills": 0,
+                "Tax": 0,
+                "EMI": 0
+            }
+        else:
+            financial_data = json.loads(result[0])
+
+        # Get monthly budget from user
+        try:
+            monthly_budget = int(input("Enter your Monthly Budget: "))
+        except ValueError:
+            print("Invalid input for Monthly Budget. Please enter a number.")
+            return
+
+        # Dynamically prompt for each expense category
+        monthly_expenses = 0
+        for col in financial_data:
+            if col != "Monthly_Budget":
+                try:
+                    expense_value = int(input(f"Enter your {col.replace('_', ' ')}: "))
+                    financial_data[col] = expense_value
+                    monthly_expenses += expense_value
+                except ValueError:
+                    print(f"Invalid input for {col}. Please enter a number.")
+                    return
+        
+        financial_data["Monthly_Budget"] = monthly_budget
+        financial_data["Monthly_Expenses"] = monthly_expenses
+        financial_data["Amount_Left"] = monthly_budget - monthly_expenses
+
+        # Update the JSON column in the database
+        update_query = "UPDATE udata SET financial_data = %s WHERE uid = %s"
+        data_tuple = (json.dumps(financial_data), user_id)
+        
+        cursor.execute(update_query, data_tuple)
+        db.commit()
+        print("\nFinancial data updated successfully!")
+
+    except ValueError:
+        print("\nInvalid input. Please enter a valid number for all financial fields.")
+        db.rollback()
+    except mysql.connector.Error as err:
+        print(f"Error updating financial data: {err}")
+        db.rollback()
+    finally:
+        if 'cursor' in locals() and cursor is not None:
+            cursor.close()
+
+def view_user_data(db, user_id):
+    """
+    Fetches and displays the user's current financial data from the udata table in a table format.
+    """
+    print("\n--- Your Current Financial Data ---")
+    cursor = db.cursor()
+    try:
+        # SELECT query to retrieve the user's financial data
+        select_query = "SELECT financial_data FROM udata WHERE uid = %s"
+        cursor.execute(select_query, (user_id,))
+        result = cursor.fetchone()
+
+        if result and result[0] is not None:
+            financial_data = json.loads(result[0])
+
+            # Define the order of fixed columns
+            fixed_order = ['Monthly_Budget', 'Food_Expenses', 'Personal_Expenses', 'Bills', 'Tax', 'EMI']
+            # Define the special columns that should always be at the end
+            final_summary_columns = ['Monthly_Expenses', 'Amount_Left']
+
+            # Create a list of all columns to be displayed, in the correct order
+            display_keys = []
+            
+            # Add fixed columns first
+            for key in fixed_order:
+                if key in financial_data:
+                    display_keys.append(key)
+            
+            # Add any new/custom columns that are not in the fixed list or final summary
+            for key in financial_data:
+                if key not in fixed_order and key not in final_summary_columns:
+                    display_keys.append(key)
+            
+            # Add the final summary columns
+            for key in final_summary_columns:
+                if key in financial_data:
+                    display_keys.append(key)
+
+            # Prepare data for the table based on the new order
+            data = [(key.replace('_', ' '), financial_data[key]) for key in display_keys]
+
+            # Find the max width for columns
+            max_key_width = max(len(item[0]) for item in data) if data else 0
+            max_value_width = max(len(str(item[1])) for item in data) if data else 0
+            
+            # Define header and separator
+            header_format = f"{{:<{max_key_width}}} | {{:>{max_value_width}}}"
+            line_separator = f"{'-' * max_key_width}-+-{'-' * max_value_width}"
+
+            # Print the table header
+            print(line_separator)
+            print(header_format.format("Category", "Amount"))
+            print(line_separator)
+            
+            # Print the table data
+            for key, value in data:
+                print(header_format.format(key, value))
+            
+            print(line_separator)
+
+        else:
+            print("No financial data found for your account.")
+    except mysql.connector.Error as err:
+        print(f"Error viewing financial data: {err}")
+    finally:
+        cursor.close()
+
+def add_custom_expense_column(db, user_id):
+    """
+    Allows the user to add a new expense column to the udata table by modifying their JSON data.
+    """
+    print("\n--- Add a New Expense Category ---")
+    new_column_name = input("Enter the name for the new expense category (e.g., 'Gym_Fee'): ").strip()
+    
+    # Simple validation for the column name
+    if not new_column_name or ' ' in new_column_name:
+        print("Invalid column name. Please use a single word or words separated by underscores (e.g., 'Travel_Expenses').")
+        return
+    
+    cursor = db.cursor()
+    try:
+        # Get existing financial data from the JSON column
+        select_query = "SELECT financial_data FROM udata WHERE uid = %s"
+        cursor.execute(select_query, (user_id,))
+        result = cursor.fetchone()
+
+        if not result or result[0] is None:
+            print("No financial data found for this user. Please update your data first.")
+            return
+        
+        financial_data = json.loads(result[0])
+
+        if new_column_name in financial_data:
+            print(f"An expense category named '{new_column_name}' already exists.")
+            return
+
+        # Add the new key to the JSON object
+        financial_data[new_column_name] = 0
+
+        # Update the JSON column in the database
+        update_query = "UPDATE udata SET financial_data = %s WHERE uid = %s"
+        data_tuple = (json.dumps(financial_data), user_id)
+        
+        cursor.execute(update_query, data_tuple)
+        db.commit()
+        print(f"New expense category '{new_column_name}' added successfully for user {user_id}!")
+    except mysql.connector.Error as err:
+        print(f"Error adding new column: {err}")
+        db.rollback()
+    finally:
+        cursor.close()
+
+def main():
+    """
+    Main function to run the user management application.
+    """
+    db = get_db_connection()
+    if not db:
+        return
+
+    while True:
+        choice = input("\nDo you want to (1) Log In or (2) Sign Up? (Enter '1', '2', or 'exit'): ").strip().lower()
+        if choice == '1':
+            logged_in_uid = login_user(db)
+            if logged_in_uid:
+                while True:
+                    action = input("\nDo you want to (1) Update Data, (2) View Data, (3) Add New Expense Category, or (4) Log Out? (Enter '1', '2', '3', or '4'): ").strip()
+                    if action == '1':
+                        update_user_data(db, logged_in_uid)
+                    elif action == '2':
+                        view_user_data(db, logged_in_uid)
+                    elif action == '3':
+                        add_custom_expense_column(db, logged_in_uid)
+                    elif action == '4':
+                        print("Logging out.")
+                        break
+                    else:
+                        print("Invalid choice. Please enter '1', '2', '3', or '4'.")
+            break
+        elif choice == '2':
+            signup_user(db)
+            break
+        elif choice == 'exit':
+            print("Exiting application.")
+            break
+        else:
+            print("Invalid choice. Please enter '1', '2', or 'exit'.")
+
+    if db.is_connected():
+        db.close()
+        print("Database connection closed.")
+
+if __name__ == "__main__":
+    main()
