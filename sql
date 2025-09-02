@@ -21,3 +21,16 @@ CREATE TABLE udata (
     Amount_Left INT, 
     FOREIGN KEY (uid) REFERENCES uinfo(uid)
 );
+
+ALTER TABLE udata 
+DROP COLUMN Monthly_Budget,
+DROP COLUMN Food_Expenses,
+DROP COLUMN Personal_Expenses,
+DROP COLUMN Bills,
+DROP COLUMN Tax,
+DROP COLUMN EMI,
+DROP COLUMN Monthly_Expenses,
+DROP COLUMN Amount_Left;
+
+ALTER TABLE udata 
+ADD COLUMN financial_data JSON;
