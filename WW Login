@@ -1,73 +1,127 @@
 import mysql.connector
 import hashlib
-db = mysql.connector.connect(
-  host="localhost",
-  user="root",
-  password="1234",
-  database="WW"
-)
-if db.is_connected():
-    print("Connection is open.")
-else:
-    print("Connection is closed.")
-# Signin Phase
 
-user_id = input("Enter your user ID (max 10 characters): ")
-user_pass = input("Enter your Password (8 characters): ")
-user_mail = input("Enter your E-mail: ")
-user_age = input("Enter your Age: ")
+def get_db_connection():
+  
+    try:
+        db = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="1234",
+            database="WW"
+        )
+        if db.is_connected():
+            print("Database connection successful.")
+            return db
+    except mysql.connector.Error as err:
+        print(f"Failed to connect to MySQL database: {err}")
+        return None
 
-# --- 1. Checking for user ID ---
-c_id = user_id.strip()
-if c_id == "":
-    print("INVALID ID! \nID can't be left blank")
-elif len(user_id) > 10:
-    print("INVALID ID! \nID must not exceed 10 characters")
-else:
-    print("ID accepted")
+def check_user_exists(cursor, user_id):
+    """
+    Checks if a user with the given ID already exists.
+    Returns True if the user exists, otherwise False.
+    """
+    query = "SELECT EXISTS(SELECT 1 FROM uinfo WHERE uid = %s)"
+    cursor.execute(query, (user_id,))
+    return cursor.fetchone()[0] == 1
 
-# --- 2. Checking for user Password ---
-c_pass = user_pass.strip()
-if c_pass == "":
-    print("INVALID PASSWORD! \nPassword cannot be blank or only spaces")
-elif len(user_pass) != 8:
-    print("INVALID PASSWORD! \nPassword must be exactly 8 characters long")
-else:
-    print("Password accepted")
+def login_user(db):
+    """
+    Handles the login process for an existing user.
+    """
+    user_id = input("Enter your User ID: ").strip()
+    user_pass = input("Enter your Password: ").strip()
 
-# --- 3. Checking for user E-mail ---
-c_mail = user_mail.strip()
-if c_mail == "":
-    print("INVALID EMAIL! \nEmail cannot be left blank")
-elif "@" not in c_mail or "." not in c_mail:
-    print("INVALID EMAIL! \nEmail must contain '@' and '.'")
-else:
-    print("Email accepted")
-
-# --- 4. Checking for user Age ---
-c_age = user_age.strip()
-if c_age == "":
-    print("INVALID AGE! \nAge cannot be left blank")
-elif not c_age.isdigit():
-    print("INVALID AGE! \nAge must contain only numbers")
-else:
-    print("Age accepted")
-
-hashed_pass = hashlib.sha256(user_pass.encode()).hexdigest()
-if db.is_connected():
-    print("Connection successful!")
     cursor = db.cursor()
-    insert_query = 'insert into uinfo(uid, upass, email, age)VALUES (%s, %s, %s, %s)'
-                # Prepare the data as a tuple
-    user_data_tuple = (user_id, hashed_pass, user_mail, int(user_age))
-                
-                # Execute the query
-    cursor.execute(insert_query, user_data_tuple)
-                
-                # Commit the changes to the database
-    db.commit()
-                
-    print("\nUser data added to the database successfully!")
+    try:
+        # Retrieve the hashed password for the user
+        query = "SELECT upass FROM uinfo WHERE uid = %s"
+        cursor.execute(query, (user_id,))
+        result = cursor.fetchone()
+
+        if result:
+            stored_hashed_pass = result[0]
+            
+            # Hash the entered password
+            hashed_entered_pass = hashlib.sha256(user_pass.encode()).hexdigest()
+
+            # Compare the hashes
+            if hashed_entered_pass == stored_hashed_pass:
+                print("\nLogin successful!")
+            else:
+                print("\nInvalid password. Please try again.")
+        else:
+            print("\nUser ID not found. Please sign up.")
+    except mysql.connector.Error as err:
+        print(f"Error during login: {err}")
+    finally:
+        cursor.close()
+
+def signup_user(db):
+    """
+    Handles the sign-up process for a new user.
+    """
+    user_id = input("Enter a new User ID: ").strip()
+    
+    cursor = db.cursor()
+    try:
+        if check_user_exists(cursor, user_id):
+            print("This User ID already exists. Please log in or choose another ID.")
+            return
+
+        user_pass = input("Create a Password (min 8 characters): ").strip()
+        user_mail = input("Enter your E-mail: ").strip()
+        user_age = input("Enter your Age: ").strip()
+
+        # Simple validation before hashing
+        if len(user_pass) < 8 or not user_mail or not user_age.isdigit():
+            print("Invalid input. Password must be at least 8 characters, email and age are required.")
+            return
+
+        # Hash the password without a salt
+        hashed_pass = hashlib.sha256(user_pass.encode()).hexdigest()
+        
+        insert_query = 'INSERT INTO uinfo(uid, upass, email, age) VALUES (%s, %s, %s, %s)'
+        user_data_tuple = (user_id, hashed_pass, user_mail, int(user_age))
+
+        cursor.execute(insert_query, user_data_tuple)
+        db.commit()
+        print("\nSign-up successful! You can now log in.")
+    except mysql.connector.Error as err:
+        print(f"Failed to insert data into the database: {err}")
+        db.rollback()
+    finally:
+        cursor.close()
+
+def main():
+    
+    db = get_db_connection()
+    if not db:
+        return
+
+    while True:
+        choice = input("\nDo you want to (1) Log In or (2) Sign Up? (Enter '1', '2', or 'exit'): ").strip().lower()
+        if choice == '1':
+            login_user(db)
+            break
+        elif choice == '2':
+            signup_user(db)
+            break
+        elif choice == 'exit':
+            print("Exiting application.")
+            break
+        else:
+            print("Invalid choice. Please enter '1', '2', or 'exit'.")
+
+    if db.is_connected():
+        db.close()
+        print("Database connection closed.")
+
+if __name__ == "__main__":
+    main()
+
+
 
 
 
